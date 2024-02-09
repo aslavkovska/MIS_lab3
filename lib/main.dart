@@ -1,12 +1,35 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:awesome_notifications/awesome_notifications.dart';
 import 'firebase_options.dart';
 import 'exam.dart';
+import 'calendar.dart';
+import 'notifications.dart';
 
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  await AwesomeNotifications().initialize(null, [
+    NotificationChannel(
+      channelGroupKey: "basic_channel_group",
+      channelKey: "basic_channel",
+      channelName: "basic_notif",
+      channelDescription: "basic notification channel",
+    )
+  ], channelGroups: [
+    NotificationChannelGroup(
+        channelGroupKey: "basic_channel_group", channelGroupName: "basic_group")
+  ]);
+
+  bool isAllowedToSendNotification =
+  await AwesomeNotifications().isNotificationAllowed();
+
+  if (!isAllowedToSendNotification) {
+    AwesomeNotifications().requestPermissionToSendNotifications();
+  }
+
   runApp(const MyApp());
 }
 
@@ -36,9 +59,29 @@ class MainListScreen extends StatefulWidget {
 
 class MainListScreenState extends State<MainListScreen> {
   final List<Exam> exams = [
-    Exam(course: 'Mobilni IS', timestamp: DateTime(2024, 01, 20, 12, 0)),
+    Exam(course: 'Mobilni IS', timestamp: DateTime(2024, 02, 10, 13, 00)),
     Exam(course: 'VNP', timestamp: DateTime(2023, 12, 23, 14, 0))
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    AwesomeNotifications().setListeners(
+        onActionReceivedMethod: NotificationController.onActionReceiveMethod,
+        onDismissActionReceivedMethod:
+        NotificationController.onDismissActionReceiveMethod,
+        onNotificationCreatedMethod:
+        NotificationController.onNotificationCreateMethod,
+        onNotificationDisplayedMethod:
+        NotificationController.onNotificationDisplayed);
+    scheduleNotificationsForExams();
+  }
+
+  void scheduleNotificationsForExams() {
+    for (int i = 0; i < exams.length; i++) {
+      scheduleNotification(exams[i]);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +89,10 @@ class MainListScreenState extends State<MainListScreen> {
       appBar: AppBar(
         title: const Text('Exams'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_month),
+            onPressed: calendar,
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => FirebaseAuth.instance.currentUser != null
@@ -97,15 +144,13 @@ class MainListScreenState extends State<MainListScreen> {
     );
   }
 
-
-  void signInPage(BuildContext context) {
-    Future.delayed(Duration.zero, () {
-      Navigator.pushReplacementNamed(context, '/login');
-    });
-  }
-
-  Future<void> signOut() async {
-    await FirebaseAuth.instance.signOut();
+  void calendar() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CalendarWidget(exams: exams),
+      ),
+    );
   }
 
   Future<void> addExam(BuildContext context) async {
@@ -125,7 +170,36 @@ class MainListScreenState extends State<MainListScreen> {
   void addExamFunction(Exam exam) {
     setState(() {
       exams.add(exam);
+        scheduleNotification(exam);
     });
+  }
+
+
+  void scheduleNotification(Exam exam) {
+    final int notificationId = exams.indexOf(exam);
+
+    AwesomeNotifications().createNotification(
+        content: NotificationContent(
+            id: notificationId,
+            channelKey: "basic_channel",
+            title: exam.course,
+            body: "You have an exam tomorrow!"),
+        schedule: NotificationCalendar(
+            day: exam.timestamp.subtract(const Duration(days: 1)).day,
+            month: exam.timestamp.subtract(const Duration(days: 1)).month,
+            year: exam.timestamp.subtract(const Duration(days: 1)).year,
+            hour: exam.timestamp.subtract(const Duration(days: 1)).hour,
+            minute: exam.timestamp.subtract(const Duration(days: 1)).minute));
+  }
+
+  void signInPage(BuildContext context) {
+    Future.delayed(Duration.zero, () {
+      Navigator.pushReplacementNamed(context, '/login');
+    });
+  }
+
+  Future<void> signOut() async {
+    await FirebaseAuth.instance.signOut();
   }
 }
 
