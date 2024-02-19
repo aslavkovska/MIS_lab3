@@ -4,8 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 import 'firebase_options.dart';
 import 'exam.dart';
+import 'map.dart';
 import 'calendar.dart';
 import 'notifications.dart';
+import 'notifications_service.dart';
 
 void main() async{
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,6 +65,8 @@ class MainListScreenState extends State<MainListScreen> {
     Exam(course: 'VNP', timestamp: DateTime(2023, 12, 23, 14, 0))
   ];
 
+  bool isLocationBasedNotificationsEnabled = false;
+
   @override
   void initState() {
     super.initState();
@@ -74,13 +78,7 @@ class MainListScreenState extends State<MainListScreen> {
         NotificationController.onNotificationCreateMethod,
         onNotificationDisplayedMethod:
         NotificationController.onNotificationDisplayed);
-    scheduleNotificationsForExams();
-  }
-
-  void scheduleNotificationsForExams() {
-    for (int i = 0; i < exams.length; i++) {
-      scheduleNotification(exams[i]);
-    }
+    NotificationService().scheduleNotificationsForExistingExams(exams);
   }
 
   @override
@@ -90,9 +88,15 @@ class MainListScreenState extends State<MainListScreen> {
         title: const Text('Exams'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.calendar_month),
-            onPressed: calendar,
+            icon: const Icon(Icons.alarm_add),
+            color: isLocationBasedNotificationsEnabled
+                ? Colors.amberAccent
+                : Colors.grey,
+            onPressed: toggleLocationNotifications,
           ),
+          IconButton(
+              onPressed: map,
+              icon: const Icon(Icons.map)),
           IconButton(
             icon: const Icon(Icons.add),
             onPressed: () => FirebaseAuth.instance.currentUser != null
@@ -144,6 +148,34 @@ class MainListScreenState extends State<MainListScreen> {
     );
   }
 
+  void toggleLocationNotifications() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text("Location Based Notifications"),
+          content: isLocationBasedNotificationsEnabled
+              ? const Text("You have turned off location-based notifications")
+              : const Text("You have turned on location-based notifications"),
+          actions: [
+            TextButton(
+              onPressed: () {
+                NotificationService().toggleLocationNotification();
+                setState(() {
+                  isLocationBasedNotificationsEnabled =
+                  !isLocationBasedNotificationsEnabled;
+                });
+                Navigator.pop(context);
+              },
+              child: const Text("OK"),
+            )
+          ],
+        );
+      },
+    );
+  }
+
   void calendar() {
     Navigator.push(
       context,
@@ -151,6 +183,11 @@ class MainListScreenState extends State<MainListScreen> {
         builder: (context) => CalendarWidget(exams: exams),
       ),
     );
+  }
+
+  void map() {
+    Navigator.push(
+        context, MaterialPageRoute(builder: (context) => const MapWidget()));
   }
 
   Future<void> addExam(BuildContext context) async {
@@ -170,27 +207,10 @@ class MainListScreenState extends State<MainListScreen> {
   void addExamFunction(Exam exam) {
     setState(() {
       exams.add(exam);
-        scheduleNotification(exam);
+        NotificationService().scheduleNotification(exam);
     });
   }
 
-
-  void scheduleNotification(Exam exam) {
-    final int notificationId = exams.indexOf(exam);
-
-    AwesomeNotifications().createNotification(
-        content: NotificationContent(
-            id: notificationId,
-            channelKey: "basic_channel",
-            title: exam.course,
-            body: "You have an exam tomorrow!"),
-        schedule: NotificationCalendar(
-            day: exam.timestamp.subtract(const Duration(days: 1)).day,
-            month: exam.timestamp.subtract(const Duration(days: 1)).month,
-            year: exam.timestamp.subtract(const Duration(days: 1)).year,
-            hour: exam.timestamp.subtract(const Duration(days: 1)).hour,
-            minute: exam.timestamp.subtract(const Duration(days: 1)).minute));
-  }
 
   void signInPage(BuildContext context) {
     Future.delayed(Duration.zero, () {
